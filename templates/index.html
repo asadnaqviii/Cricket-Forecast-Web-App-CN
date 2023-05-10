@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cricket Match Forecast</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1 class="mt-5">Cricket Match Forecast</h1>
+        <form id="prediction-form" class="mt-4">
+            <div class="form-group">
+                <label for="user">Name:</label>
+                <input type="text" class="form-control" id="user" name="user" required>
+            </div>
+            <div class="form-group">
+                <label for="match_link">Match Link:</label>
+                <input type="url" class="form-control" id="match_link" name="match_link" required>
+            </div>
+            <div class="form-group">
+                <label for="player">Player:</label>
+                <select class="form-control" id="player" name="player" required disabled>
+                    <option value="">--Select Player--</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="predicted_score">Predicted Score:</label>
+                <input type="number" class="form-control" id="predicted_score" name="predicted_score" required disabled>
+            </div>
+            <button type="submit" class="btn btn-primary" id="submit-prediction" disabled>Submit Prediction</button>
+        </form>
+        <h2 class="mt-5">Predictions</h2>
+        <div class="list-group" id="predictions"></div>
+    </div>
+
+    <script>
+        $(document).ready(function() {
+            function loadPredictions() {
+                $.getJSON('/get_predictions', function(predictions) {
+                    $('#predictions').empty();
+                    predictions.forEach(function(prediction) {
+                        $('#predictions').append('<div class="list-group-item d-flex justify-content-between align-items-center">' + prediction[1] + ': ' + prediction[3] + ' (' + prediction[4] + ')' +
+                            '<div class="btn-group">' +
+                                '<button class="btn btn-success btn-sm upvote" data-id="' + prediction[0] + '">Upvote</button>' +
+                                '<button class="btn btn-danger btn-sm downvote" data-id="' + prediction[0] + '">Downvote</button>' +
+                                '<button class="btn btn-warning btn-sm ridiculous" data-id="' + prediction[0] + '">Ridiculous</button>' +
+                                '<span class="badge badge-primary badge-pill ml-2">' + prediction[5] + ' Upvotes</span>' +
+                                '<span class="badge badge-danger badge-pill ml-2">' + prediction[6] + ' Downvotes</span>' +
+                                '<span class="badge badge-warning badge-pill ml-2">' + prediction[7] + ' Ridiculous</span>' +
+                            '</div>' +
+                        '</div>');
+                    });
+                });
+            }
+
+            $('#match_link').on('input', function() {
+                let matchLink = $(this).val();
+                if (matchLink) {
+                $('#player').empty().prop('disabled', false);
+                $('#predicted_score').prop('disabled', false);
+                $('#submit-prediction').prop('disabled', false);
+                $('#player').append('<option value="">--Select Player--</option>');
+
+                $.ajax({
+                    type: 'GET',
+                    url: '/get_live_players',
+                    data: { match_link: matchLink },
+                    success: function(players) {
+                        players.forEach(function(player) {
+                            $('#player').append('<option value="' + player.name + '">' + player.name + ' (' + player.runs + ')</option>');
+                        });
+                    },
+                    error: function() {
+                        alert('Error loading players');
+                    }
+                });
+            } else {
+                $('#player').empty().prop('disabled', true);
+                $('#predicted_score').prop('disabled', true);
+                $('#submit-prediction').prop('disabled', true);
+            }
+        });
+
+        $('#prediction-form').submit(function(e) {
+            e.preventDefault();
+
+            let predictionData = {
+                user: $('#user').val(),
+                match_link: $('#match_link').val(),
+                player: $('#player').val(),
+                predicted_score: $('#predicted_score').val()
+            };
+
+            $.ajax({
+                type: 'POST',
+                url: '/add_prediction',
+                contentType: 'application/json',
+                data: JSON.stringify(predictionData),
+                success: function(response) {
+                    if (response.status === 'success') {
+                        loadPredictions();
+                        $('#prediction-form')[0].reset();
+                        $('#player').empty().prop('disabled', true);
+                        $('#predicted_score').prop('disabled', true);
+                        $('#submit-prediction').prop('disabled', true);
+                    } else {
+                        alert('Error adding prediction');
+                    }
+                },
+                error: function() {
+                    alert('Error adding prediction');
+                }
+            });
+        });
+
+        function castVote(prediction_id, vote_type) {
+            $.ajax({
+                type: 'POST',
+                url: '/cast_vote',
+                contentType: 'application/json',
+                data: JSON.stringify({ prediction_id: prediction_id, vote_type: vote_type }),
+                success: function(response) {
+                    if (response.status === 'success') {
+                        loadPredictions();
+                    } else {
+                        alert('Error casting vote');
+                    }
+                },
+                error: function() {
+                    alert('Error casting vote');
+                }
+            });
+        }
+
+        $(document).on('click', '.upvote', function() {
+            let prediction_id = $(this).data('id');
+            castVote(prediction_id, 'upvote');
+        });
+
+        $(document).on('click', '.downvote', function() {
+            let prediction_id = $(this).data('id');
+            castVote(prediction_id, 'downvote');
+        });
+
+        $(document).on('click', '.ridiculous', function() {
+            let prediction_id = $(this).data('id');
+            castVote(prediction_id, 'ridiculous');
+        });
+
+        loadPredictions();
+    });
+</script>
+</body>
+</html>
